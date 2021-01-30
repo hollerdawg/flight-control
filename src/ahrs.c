@@ -1,8 +1,4 @@
 #include "ahrs.h"
-#include <zephyr.h>
-#include <drivers/sensor.h>
-#include <stdio.h>
-#include "MadgwickAHRS.h"
 
 K_SEM_DEFINE(fxos_sem, 0, 1);	/* starts off "not available" */
 

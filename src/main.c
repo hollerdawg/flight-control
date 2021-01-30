@@ -3,6 +3,7 @@
 #include <sys/printk.h>
 #include <kernel.h>
 #include "ahrs.h"
+#include "motorcontrol.h"
 
 /* size of stack area used by each thread */
 #define STACKSIZE 1024
@@ -31,6 +32,8 @@ void RunFaultReporting(void)
 }
 
 K_THREAD_DEFINE(RunAHRS_id, STACKSIZE, RunAHRS, NULL, NULL, NULL,
+		PRIORITY, 0, 0);
+K_THREAD_DEFINE(RunMotorControl_id, STACKSIZE, RunMotorControl, NULL, NULL, NULL,
 		PRIORITY, 0, 0);
 // K_THREAD_DEFINE(RunFaultReporting_id, STACKSIZE, RunFaultReporting, NULL, NULL, NULL,
 // 		PRIORITY, 0, 0);
