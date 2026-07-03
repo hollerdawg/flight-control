@@ -5,6 +5,8 @@
 #include <zephyr/logging/log.h>
 #include <math.h>
 
+#include "pid_control.h"
+
 #if IS_ENABLED(CONFIG_CMSIS_DSP)
 #include <arm_math.h>
 #endif
@@ -40,19 +42,12 @@ typedef enum {
 static flight_state_t current_state = STATE_MANUAL_FLYING;
 
 #if IS_ENABLED(CONFIG_CMSIS_DSP)
-typedef arm_pid_instance_f32 pid_controller_t;
 static pid_controller_t roll_pid;
 static pid_controller_t pitch_pid;
 static pid_controller_t yaw_pid;
 static pid_controller_t angle_pid_roll;
 static pid_controller_t angle_pid_pitch;
 #else
-typedef struct {
-    float kp, ki, kd;
-    float integrator;
-    float last_error;
-} pid_controller_t;
-
 static pid_controller_t roll_pid  = { .kp = 1.2f, .ki = 0.05f, .kd = 0.12f };
 static pid_controller_t pitch_pid = { .kp = 1.2f, .ki = 0.05f, .kd = 0.12f };
 static pid_controller_t yaw_pid   = { .kp = 2.0f, .ki = 0.10f, .kd = 0.05f };
@@ -192,21 +187,6 @@ static const struct device *const accel_dev = DEVICE_DT_GET(DT_CHOSEN(flt_ctl_ac
 static const struct device *const baro_dev  = DEVICE_DT_GET(DT_CHOSEN(flt_ctl_baro));
 #endif
 
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
-static inline float pid_update(pid_controller_t *pid, float target, float current, float dt)
-{
-    return arm_pid_f32(pid, target - current);
-}
-#else
-static float pid_update(pid_controller_t *pid, float target, float current, float dt)
-{
-    float error = target - current;
-    pid->integrator += error * dt;
-    float derivative = (error - pid->last_error) / dt;
-    pid->last_error = error;
-    return (pid->kp * error) + (pid->ki * pid->integrator) + (pid->kd * derivative);
-}
-#endif
 
 #if !IS_ENABLED(CONFIG_FLIGHT_CTL_RC_IBUS)
 static volatile int64_t last_rc_update_time = 0;
