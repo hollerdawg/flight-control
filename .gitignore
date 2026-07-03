@@ -1,0 +1,17 @@
+# Zephyr build outputs
+build/
+
+# IDEs and editors
+.vscode/
+.idea/
+.clang-format
+*.swp
+*~
+
+# Compiled python files
+__pycache__/
+*.py[cod]
+
+# OS generated files
+.DS_Store
+Thumbs.db

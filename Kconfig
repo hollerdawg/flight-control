@@ -1,0 +1,20 @@
+# Kconfig - Application Configuration
+mainmenu "Zephyr Quadcopter Flight Controller Configuration"
+
+config FLIGHT_CTL_HAS_BARO
+    bool "Enable Barometer and Altitude Control Subsystem"
+    default n
+    select SENSOR
+    select DPS310
+    help
+      Enables the Infineon DPS310 barometer device binding, relative altitude 
+      estimation, Z-axis PID tracking, and the automated landing assist state machine.
+config FLIGHT_CTL_RC_IBUS
+    bool "Use iBUS serial protocol for RC input (instead of PWM capture)"
+    default n
+    help
+      When enabled, RC channel data is received via iBUS protocol on UART2
+      (115200 baud, single wire). Supports up to 14 channels. When disabled,
+      individual PWM capture inputs on FTM1/FTM2 are used for each channel.
+
+source "Kconfig.zephyr"

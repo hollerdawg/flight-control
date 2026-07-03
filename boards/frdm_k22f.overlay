@@ -1,0 +1,196 @@
+/ {
+    chosen {
+        zephyr,console = &uart1;
+        zephyr,shell-uart = &uart1;
+        quad-ibus-uart = &uart2;
+        flt_ctl,gyro = &fxas21002_frdm_stbc_agm01;
+        flt_ctl,accel = &fxos8700;
+        flt_ctl,baro = &dps310;
+    };
+
+    /* Define convenient aliases for our 4 quadcopter motors and RC inputs */
+    aliases {
+        motor-front-left  = &pwm_m1;
+        motor-front-right = &pwm_m2;
+        motor-rear-left   = &pwm_m3;
+        motor-rear-right  = &pwm_m4;
+        rc-throttle       = &pwm_capture_throttle;
+        rc-roll           = &pwm_capture_roll;
+        rc-pitch          = &pwm_capture_pitch;
+        rc-yaw            = &pwm_capture_yaw;
+        rc-mode           = &pwm_capture_mode;
+        rc-landing        = &pwm_capture_landing;
+    };
+
+    quad_motors {
+        compatible = "pwm-leds";
+        pwm_m1: motor_1 {
+            pwms = <&ftm0 0 PWM_HZ(400) PWM_POLARITY_NORMAL>; // PTC1 (FTM0_CH0)
+        };
+        pwm_m2: motor_2 {
+            pwms = <&ftm0 1 PWM_HZ(400) PWM_POLARITY_NORMAL>; // PTC2 (FTM0_CH1)
+        };
+        pwm_m3: motor_3 {
+            pwms = <&ftm0 2 PWM_HZ(400) PWM_POLARITY_NORMAL>; // PTC3 (FTM0_CH2)
+        };
+        pwm_m4: motor_4 {
+            pwms = <&ftm0 3 PWM_HZ(400) PWM_POLARITY_NORMAL>; // PTC4 (FTM0_CH3)
+        };
+    };
+
+    rc_inputs {
+        compatible = "pwm-leds";
+        /* FTM1_CH0 - Mapped to Pin PTA12 for Throttle Input Capture */
+        pwm_capture_throttle: rx_ch1 {
+            pwms = <&ftm1 0 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+        /* FTM2_CH0 - Mapped to Pin PTB18 for Roll Input Capture */
+        pwm_capture_roll: rx_ch2 {
+            pwms = <&ftm2 0 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+        /* FTM3_CH4 - Mapped to Pin PTC8 for Pitch Input Capture */
+        pwm_capture_pitch: rx_ch3 {
+            pwms = <&ftm3 4 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+        /* FTM3_CH6 - Mapped to Pin PTC10 for Yaw Input Capture */
+        pwm_capture_yaw: rx_ch4 {
+            pwms = <&ftm3 6 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+        /* FTM3_CH0 - Mapped to Pin PTD0 for Mode Switch Input Capture */
+        pwm_capture_mode: rx_ch5 {
+            pwms = <&ftm3 0 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+        /* FTM3_CH2 - Mapped to Pin PTD2 for Landing Switch Input Capture */
+        pwm_capture_landing: rx_ch6 {
+            pwms = <&ftm3 2 PWM_USEC(2000) PWM_POLARITY_NORMAL>;
+        };
+    };
+};
+
+/* Multi-Group Pin Routing Profiles using verified macro naming schemas */
+&pinctrl {
+    ftm0_default: ftm0_default {
+        group0 {
+            pinmux = <FTM0_CH0_PTC1>;
+            drive-strength = "low";
+            slew-rate = "fast";
+        };
+        group1 {
+            pinmux = <FTM0_CH1_PTC2>;
+            drive-strength = "low";
+            slew-rate = "fast";
+        };
+        group2 {
+            pinmux = <FTM0_CH2_PTC3>;
+            drive-strength = "low";
+            slew-rate = "fast";
+        };
+        group3 {
+            pinmux = <FTM0_CH3_PTC4>;
+            drive-strength = "low";
+            slew-rate = "fast";
+        };
+    };
+
+    ftm1_default: ftm1_default {
+        group0 {
+            pinmux = <FTM1_CH0_PTA12>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up; /* Pull-up enabled specifically for input signal tracking */
+        };
+    };
+
+    ftm2_default: ftm2_default {
+        group0 {
+            pinmux = <FTM2_CH0_PTB18>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up; /* Pull-up enabled specifically for input signal tracking */
+        };
+    };
+
+    ftm3_default: ftm3_default {
+        group0 {
+            pinmux = <FTM3_CH0_PTD0>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up; /* Pull-up enabled specifically for input signal tracking */
+        };
+        group1 {
+            pinmux = <FTM3_CH4_PTC8>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up;
+        };
+        group2 {
+            pinmux = <FTM3_CH6_PTC10>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up;
+        };
+        group3 {
+            pinmux = <FTM3_CH2_PTD2>;
+            drive-strength = "low";
+            slew-rate = "fast";
+            bias-pull-up;
+        };
+    };
+};
+
+&i2c0 {
+    status = "okay";
+    pinctrl-0 = <&i2c0_default>;
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>; // 400kHz
+
+    dps310: dps310@76 {
+        compatible = "infineon,dps310";
+        reg = <0x76>;
+        status = "okay";
+    };
+};
+
+/* FlexTimer Blocks updated for Zephyr 3-Cell PWM Driver Compatibility */
+&ftm0 {
+    status = "okay";
+    compatible = "nxp,ftm-pwm";
+    clock-source = "system";
+    #pwm-cells = <3>;
+    pinctrl-0 = <&ftm0_default>;
+    pinctrl-names = "default";
+};
+
+&ftm1 {
+    status = "okay";
+    compatible = "nxp,ftm-pwm";
+    clock-source = "system";
+    #pwm-cells = <3>;
+    pinctrl-0 = <&ftm1_default>;
+    pinctrl-names = "default";
+};
+
+&ftm2 {
+    status = "okay";
+    compatible = "nxp,ftm-pwm";
+    clock-source = "system";
+    #pwm-cells = <3>;
+    pinctrl-0 = <&ftm2_default>;
+    pinctrl-names = "default";
+};
+
+&ftm3 {
+    status = "okay";
+    reg = <0x40026000 0x98>; // OVERRIDE: Fix upstream Zephyr bug where FTM3 address is wrong for K22F
+    compatible = "nxp,ftm-pwm";
+    clock-source = "system";
+    #pwm-cells = <3>;
+    pinctrl-0 = <&ftm3_default>;
+    pinctrl-names = "default";
+};
+
+/* iBUS RC receiver UART (115200 baud on PTD2/RX, PTD3/TX) */
+&uart2 {
+    status = "okay";
+    current-speed = <115200>;
+};

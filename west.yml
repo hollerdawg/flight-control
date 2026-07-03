@@ -1,0 +1,20 @@
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: 7f372bfc28a895f2b7641c1fc80f19f607e30e23 # Matches current workspace version (v4.4.0 tag/branch)
+      import:
+        # Import Zephyr's standard modules list, but limit downloading to
+        # only the dependencies required for this board and application.
+        name-allowlist:
+          - cmsis_6        # Required for Cortex-M CMSIS core wrapper headers
+          - cmsis-dsp      # Required for CMSIS-DSP fast math and PID control
+          - hal_nxp        # Required for Kinetis clock and pin configurations
+          - mcux-sdk-ng    # MCUXpresso SDK for NXP peripherals
+
+  self:
+    path: quad-app
