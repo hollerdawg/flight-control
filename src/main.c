@@ -11,9 +11,9 @@
 #if IS_ENABLED(CONFIG_CMSIS_DSP)
 #include <arm_math.h>
 #endif
-
-
-
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_RC_IBUS)
 #include "ibus.h"
 #endif
@@ -40,20 +40,11 @@ typedef enum {
 
 static flight_state_t current_state = STATE_MANUAL_FLYING;
 
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
 static pid_controller_t roll_pid;
 static pid_controller_t pitch_pid;
 static pid_controller_t yaw_pid;
 static pid_controller_t angle_pid_roll;
 static pid_controller_t angle_pid_pitch;
-#else
-static pid_controller_t roll_pid  = { .kp = 1.2f, .ki = 0.05f, .kd = 0.12f };
-static pid_controller_t pitch_pid = { .kp = 1.2f, .ki = 0.05f, .kd = 0.12f };
-static pid_controller_t yaw_pid   = { .kp = 2.0f, .ki = 0.10f, .kd = 0.05f };
-
-static pid_controller_t angle_pid_roll  = { .kp = 4.0f, .ki = 0.05f, .kd = 0.1f };
-static pid_controller_t angle_pid_pitch = { .kp = 4.0f, .ki = 0.05f, .kd = 0.1f };
-#endif
 
 typedef enum {
     FLIGHT_MODE_ACRO,
@@ -66,11 +57,7 @@ static float est_roll  = 0.0f;
 static float est_pitch = 0.0f;
 
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_HAS_BARO)
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
 static pid_controller_t alt_pid;
-#else
-static pid_controller_t alt_pid   = { .kp = 2.5f, .ki = 0.15f, .kd = 0.45f };
-#endif
 static float target_altitude      = 1.5f; 
 static float current_alt          = 0.0f;
 #endif
@@ -183,23 +170,15 @@ void flight_control_thread(void *p1, void *p2, void *p3)
     pwm_enable_capture(rc_landing.dev, rc_landing.channel);
 #endif
 
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
-    roll_pid.Kp = 1.2f;  roll_pid.Ki = 0.05f;  roll_pid.Kd = 0.12f;
-    arm_pid_init_f32(&roll_pid, 1);
-    pitch_pid.Kp = 1.2f; pitch_pid.Ki = 0.05f; pitch_pid.Kd = 0.12f;
-    arm_pid_init_f32(&pitch_pid, 1);
-    yaw_pid.Kp = 2.0f;   yaw_pid.Ki = 0.10f;   yaw_pid.Kd = 0.05f;
-    arm_pid_init_f32(&yaw_pid, 1);
+    pid_init(&roll_pid, 1.2f, 0.05f, 0.12f, DT_SEC);
+    pid_init(&pitch_pid, 1.2f, 0.05f, 0.12f, DT_SEC);
+    pid_init(&yaw_pid, 2.0f, 0.10f, 0.05f, DT_SEC);
 
-    angle_pid_roll.Kp = 4.0f;  angle_pid_roll.Ki = 0.05f;  angle_pid_roll.Kd = 0.1f;
-    arm_pid_init_f32(&angle_pid_roll, 1);
-    angle_pid_pitch.Kp = 4.0f; angle_pid_pitch.Ki = 0.05f; angle_pid_pitch.Kd = 0.1f;
-    arm_pid_init_f32(&angle_pid_pitch, 1);
+    pid_init(&angle_pid_roll, 4.0f, 0.05f, 0.1f, DT_SEC);
+    pid_init(&angle_pid_pitch, 4.0f, 0.05f, 0.1f, DT_SEC);
 
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_HAS_BARO)
-    alt_pid.Kp = 2.5f;   alt_pid.Ki = 0.15f;   alt_pid.Kd = 0.45f;
-    arm_pid_init_f32(&alt_pid, 1);
-#endif
+    pid_init(&alt_pid, 2.5f, 0.15f, 0.45f, DT_SEC);
 #endif
 
     LOG_INF("Starting IMU Gyro Calibration. Please keep the drone perfectly still...");
@@ -272,9 +251,9 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         /* 2. IMU SENSOR FETCH (FXAS21002 GYRO & FXOS8700 ACCEL) */
         sensor_sample_fetch(gyro_dev);
         sensor_channel_get(gyro_dev, SENSOR_CHAN_GYRO_XYZ, gyro_data);
-        roll_rate  = (float)sensor_value_to_double(&gyro_data[0]) - gyro_bias_roll;
-        pitch_rate = (float)sensor_value_to_double(&gyro_data[1]) - gyro_bias_pitch;
-        yaw_rate   = (float)sensor_value_to_double(&gyro_data[2]) - gyro_bias_yaw;
+        float gx = (float)sensor_value_to_double(&gyro_data[0]) - gyro_bias_roll;
+        float gy = (float)sensor_value_to_double(&gyro_data[1]) - gyro_bias_pitch;
+        float gz = (float)sensor_value_to_double(&gyro_data[2]) - gyro_bias_yaw;
 
         sensor_sample_fetch(accel_dev);
         sensor_channel_get(accel_dev, SENSOR_CHAN_ACCEL_XYZ, accel_data);
@@ -282,9 +261,14 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         accel_y = (float)sensor_value_to_double(&accel_data[1]);
         accel_z = (float)sensor_value_to_double(&accel_data[2]);
 
-        /* Mahony Filter for Attitude Estimation */
-        mahony_update(roll_rate, pitch_rate, yaw_rate, accel_x, accel_y, accel_z, DT_SEC);
+        /* Mahony Filter expects rad/s */
+        mahony_update(gx, gy, gz, accel_x, accel_y, accel_z, DT_SEC);
         mahony_get_euler(&est_roll, &est_pitch);
+
+        /* Convert to deg/s for the rate PID controllers */
+        roll_rate  = gx * (180.0f / M_PI);
+        pitch_rate = gy * (180.0f / M_PI);
+        yaw_rate   = gz * (180.0f / M_PI);
 
         /* 3. CONDITIONAL ALTITUDE CONTROL / LANDING ASSIST STATE MACHINE */
         float dynamic_throttle = target_throttle;
