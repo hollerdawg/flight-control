@@ -71,6 +71,89 @@ static flight_mode_t current_flight_mode = FLIGHT_MODE_ACRO;
 static float est_roll  = 0.0f;
 static float est_pitch = 0.0f;
 
+/* Mahony Filter parameters and state */
+#define MAHONY_KP 2.0f
+#define MAHONY_KI 0.005f
+
+static float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
+static float eIntX = 0.0f, eIntY = 0.0f, eIntZ = 0.0f;
+
+static inline float my_sqrt(float val)
+{
+#if IS_ENABLED(CONFIG_CMSIS_DSP)
+    float res;
+    arm_sqrt_f32(val, &res);
+    return res;
+#else
+    return sqrtf(val);
+#endif
+}
+
+static void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+{
+    float recipNorm;
+    float vx, vy, vz;
+    float ex, ey, ez;
+    float qa, qb, qc;
+
+    // Normalise accelerometer measurement
+    float norm = my_sqrt(ax * ax + ay * ay + az * az);
+    if (norm > 0.0f) {
+        recipNorm = 1.0f / norm;
+        ax *= recipNorm;
+        ay *= recipNorm;
+        az *= recipNorm;
+
+        // Estimated direction of gravity
+        vx = 2.0f * (q1 * q3 - q0 * q2);
+        vy = 2.0f * (q0 * q1 + q2 * q3);
+        vz = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
+
+        // Error is cross product between estimated direction and measured direction of gravity
+        ex = (ay * vz - az * vy);
+        ey = (az * vx - ax * vz);
+        ez = (ax * vy - ay * vx);
+
+        // Compute and apply integral feedback if enabled
+        if (MAHONY_KI > 0.0f) {
+            eIntX += ex * dt;
+            eIntY += ey * dt;
+            eIntZ += ez * dt;
+            gx += MAHONY_KI * eIntX;
+            gy += MAHONY_KI * eIntY;
+            gz += MAHONY_KI * eIntZ;
+        } else {
+            eIntX = 0.0f;
+            eIntY = 0.0f;
+            eIntZ = 0.0f;
+        }
+
+        // Apply proportional feedback
+        gx += MAHONY_KP * ex;
+        gy += MAHONY_KP * ey;
+        gz += MAHONY_KP * ez;
+    }
+
+    // Integrate rate of change of quaternion
+    qa = q0;
+    qb = q1;
+    qc = q2;
+    q0 += (-qb * gx - qc * gy - q3 * gz) * (0.5f * dt);
+    q1 += (qa * gx + qc * gz - q3 * gy) * (0.5f * dt);
+    q2 += (qa * gy - qb * gz + q3 * gx) * (0.5f * dt);
+    q3 += (qa * gz + qb * gy - qc * gx) * (0.5f * dt);
+
+    // Normalise quaternion
+    norm = my_sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+    if (norm > 0.0f) {
+        recipNorm = 1.0f / norm;
+        q0 *= recipNorm;
+        q1 *= recipNorm;
+        q2 *= recipNorm;
+        q3 *= recipNorm;
+    }
+}
+
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_HAS_BARO)
 #if IS_ENABLED(CONFIG_CMSIS_DSP)
 static pid_controller_t alt_pid;
@@ -232,12 +315,21 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         gyro_bias_roll  += (float)sensor_value_to_double(&gyro_data[0]);
         gyro_bias_pitch += (float)sensor_value_to_double(&gyro_data[1]);
         gyro_bias_yaw   += (float)sensor_value_to_double(&gyro_data[2]);
+
+        // Also fetch accelerometer to allow the Mahony filter to align with gravity
+        sensor_sample_fetch(accel_dev);
+        sensor_channel_get(accel_dev, SENSOR_CHAN_ACCEL_XYZ, accel_data);
+        float ax = (float)sensor_value_to_double(&accel_data[0]);
+        float ay = (float)sensor_value_to_double(&accel_data[1]);
+        float az = (float)sensor_value_to_double(&accel_data[2]);
+        mahony_update(0.0f, 0.0f, 0.0f, ax, ay, az, 0.01f);
+
         k_sleep(K_MSEC(10));
     }
     gyro_bias_roll  /= (float)calib_samples;
     gyro_bias_pitch /= (float)calib_samples;
     gyro_bias_yaw   /= (float)calib_samples;
-    LOG_INF("Calibration Complete. Biases - Roll: %f, Pitch: %f, Yaw: %f", gyro_bias_roll, gyro_bias_pitch, gyro_bias_yaw);
+    LOG_INF("Calibration Complete. Biases - Roll: %f, Pitch: %f, Yaw: %f", (double)gyro_bias_roll, (double)gyro_bias_pitch, (double)gyro_bias_yaw);
 
     LOG_INF("Quadcopter Flight Control Workspace Online. Starting loop...");
 
@@ -294,19 +386,14 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         accel_y = (float)sensor_value_to_double(&accel_data[1]);
         accel_z = (float)sensor_value_to_double(&accel_data[2]);
 
-        /* Accelerometer Angles (in degrees) */
-        float accel_roll_deg  = atan2f(accel_y, accel_z) * (180.0f / M_PI);
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
-        float mag_yz;
-        arm_sqrt_f32(accel_y*accel_y + accel_z*accel_z, &mag_yz);
-        float accel_pitch_deg = atan2f(-accel_x, mag_yz) * (180.0f / M_PI);
-#else
-        float accel_pitch_deg = atan2f(-accel_x, sqrtf(accel_y*accel_y + accel_z*accel_z)) * (180.0f / M_PI);
-#endif
+        /* Mahony Filter for Attitude Estimation */
+        mahony_update(roll_rate, pitch_rate, yaw_rate, accel_x, accel_y, accel_z, DT_SEC);
 
-        /* Complementary Filter for Attitude Estimation */
-        est_roll  = 0.98f * (est_roll  + roll_rate * DT_SEC)  + 0.02f * accel_roll_deg;
-        est_pitch = 0.98f * (est_pitch + pitch_rate * DT_SEC) + 0.02f * accel_pitch_deg;
+        // Convert quaternion to Euler angles in degrees
+        est_roll  = atan2f(2.0f * (q0 * q1 + q2 * q3), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * (180.0f / M_PI);
+        float sinp = 2.0f * (q0 * q2 - q1 * q3);
+        sinp = CLAMP(sinp, -1.0f, 1.0f);
+        est_pitch = asinf(sinp) * (180.0f / M_PI);
 
         /* 3. CONDITIONAL ALTITUDE CONTROL / LANDING ASSIST STATE MACHINE */
         float dynamic_throttle = target_throttle;
