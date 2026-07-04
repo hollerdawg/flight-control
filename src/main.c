@@ -384,7 +384,38 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         pitch_rate = gy * (180.0f / M_PI);
         yaw_rate   = gz * (180.0f / M_PI);
 
-        /* 3. CONDITIONAL ALTITUDE CONTROL / LANDING ASSIST STATE MACHINE */
+        /* 3. DISARMED CHECK */
+        if (current_state == STATE_DISARMED) {
+            /* Reset all integrators to prevent windup while grounded */
+#if IS_ENABLED(CONFIG_CMSIS_DSP)
+            arm_pid_reset_f32(&roll_pid);
+            arm_pid_reset_f32(&pitch_pid);
+            arm_pid_reset_f32(&yaw_pid);
+#else
+            roll_pid.integrator = 0.0f;
+            pitch_pid.integrator = 0.0f;
+            yaw_pid.integrator = 0.0f;
+#endif
+            /* Force all motors to idle — no PID output can override this */
+            pwm_set_pulse_dt(&motor_fl, PWM_USEC(MOTOR_MIN_PULSE_US));
+            pwm_set_pulse_dt(&motor_fr, PWM_USEC(MOTOR_MIN_PULSE_US));
+            pwm_set_pulse_dt(&motor_rl, PWM_USEC(MOTOR_MIN_PULSE_US));
+            pwm_set_pulse_dt(&motor_rr, PWM_USEC(MOTOR_MIN_PULSE_US));
+
+            /* Downsampled disarmed log */
+            if (++log_divider >= 10) {
+                log_divider = 0;
+                LOG_INF("ST:DISARMED | Motors idle");
+            }
+
+            int64_t elapsed = k_uptime_get() - start_time;
+            if (elapsed < (int64_t)FLIGHT_LOOP_PERIOD_MS) {
+                k_msleep((int32_t)(FLIGHT_LOOP_PERIOD_MS - (float)elapsed));
+            }
+            continue;
+        }
+
+        /* 4. CONDITIONAL ALTITUDE CONTROL / LANDING ASSIST STATE MACHINE */
         float dynamic_throttle = target_throttle;
 
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_HAS_BARO)
@@ -407,19 +438,6 @@ void flight_control_thread(void *p1, void *p2, void *p3)
             dynamic_throttle = (float)BASE_HOVER_THROTTLE + alt_output;
         }
 #endif
-
-        if (current_state == STATE_DISARMED) {
-            dynamic_throttle = (float)MOTOR_MIN_PULSE_US;
-#if IS_ENABLED(CONFIG_CMSIS_DSP)
-            arm_pid_reset_f32(&roll_pid);
-            arm_pid_reset_f32(&pitch_pid);
-            arm_pid_reset_f32(&yaw_pid);
-#else
-            roll_pid.integrator = 0.0f;
-            pitch_pid.integrator = 0.0f;
-            yaw_pid.integrator = 0.0f;
-#endif
-        }
 
         /* 4. FLIGHT MODE LOGIC */
         if (mode_switch_val < 1300) {
