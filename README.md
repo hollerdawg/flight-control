@@ -53,3 +53,17 @@ Example Output:
 [INF] Quadcopter Flight Control Workspace Online. Starting loop...
 [INF] ST:FLYING ACRO | Alt:1.45m (Tgt:1.50m) | EstAng:(0.5, -0.2) | Thr:1480
 ```
+
+## Shell Commands
+The flight controller includes an interactive shell subsystem enabled by default (`CONFIG_SHELL=y`). You can use the following commands over the UART interface:
+
+* **Mute/Unmute Telemetry Output**:
+  To prevent the 40Hz telemetry logs from flooding the console while typing commands, mute them via:
+  ```bash
+  log disable flight_blackbox
+  ```
+  To restore logging output, run:
+  ```bash
+  log enable flight_blackbox
+  ```
+
