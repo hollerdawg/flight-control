@@ -310,6 +310,14 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         target_yaw      = ((float)ibus_channel(3) - 1500.0f) * 0.1f; /* CH4 = Yaw      */
         mode_switch_val = ibus_channel(4);                           /* CH5 = Mode     */
         landing_switch_val = ibus_channel(5);                        /* CH6 = Landing  */
+
+        /* iBUS Failsafe: check for link loss */
+        if (!ibus_is_active()) {
+            if (current_state == STATE_MANUAL_FLYING || current_state == STATE_ALT_HOLD) {
+                LOG_WRN("Failsafe triggered! iBUS signal lost.");
+                current_state = STATE_LANDING;
+            }
+        }
 #else
         /* PWM Capture (Continuous Interrupt-Driven): Read from volatile memory */
         target_throttle = (float)rc_throttle_val;
