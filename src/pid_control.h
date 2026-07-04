@@ -16,7 +16,7 @@ static inline float pid_update(pid_controller_t *pid, float target, float curren
     return arm_pid_f32(pid, target - current);
 }
 
-static inline void pid_init(pid_controller_t *pid, float kp, float ki, float kd, float dt)
+static inline void pid_init(pid_controller_t *pid, float kp, float ki, float kd, float dt, float output_limit)
 {
     pid->Kp = kp;
     pid->Ki = ki * dt;
@@ -28,9 +28,10 @@ typedef struct {
     float kp, ki, kd;
     float integrator;
     float last_error;
+    float output_limit;
 } pid_controller_t;
 
-void pid_init(pid_controller_t *pid, float kp, float ki, float kd, float dt);
+void pid_init(pid_controller_t *pid, float kp, float ki, float kd, float dt, float output_limit);
 float pid_update(pid_controller_t *pid, float target, float current, float dt);
 #endif
 

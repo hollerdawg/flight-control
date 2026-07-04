@@ -41,4 +41,28 @@ config MAG_CALIBRATION_RUNTIME
       Enables the 'mag_calib' shell command to trigger magnetometer
       calibration at runtime.
 
+config PID_RATE_MOTOR_LIMIT
+    int "PID Rate Loops Motor Output Limit"
+    default 400
+    help
+      Clamps the output of the rate (inner) PID loops (Roll/Pitch/Yaw) to this value.
+      Limits the maximum correction applied directly to the motor ESC pulses in microseconds.
+      Set to 0 to disable.
+
+config PID_ANGLE_RATE_LIMIT
+    int "PID Angle Loops Target Rate Limit"
+    default 200
+    help
+      Clamps the output of the angle (outer) PID loops to this value.
+      Limits the target angular rate (in degrees per second) sent to the rate loops.
+      Set to 0 to disable.
+
+config PID_ALTITUDE_THROTTLE_LIMIT
+    int "PID Altitude Loop Throttle Offset Limit"
+    default 200
+    help
+      Clamps the output of the altitude PID loop to this value.
+      Limits the maximum throttle adjustment offset (in microseconds) added to base hover throttle.
+      Set to 0 to disable.
+
 source "Kconfig.zephyr"

@@ -257,15 +257,15 @@ void flight_control_thread(void *p1, void *p2, void *p3)
     pwm_enable_capture(rc_landing.dev, rc_landing.channel);
 #endif
 
-    pid_init(&roll_pid, 1.2f, 0.05f, 0.12f, DT_SEC);
-    pid_init(&pitch_pid, 1.2f, 0.05f, 0.12f, DT_SEC);
-    pid_init(&yaw_pid, 2.0f, 0.10f, 0.05f, DT_SEC);
+    pid_init(&roll_pid, 1.2f, 0.05f, 0.12f, DT_SEC, (float)CONFIG_PID_RATE_MOTOR_LIMIT);
+    pid_init(&pitch_pid, 1.2f, 0.05f, 0.12f, DT_SEC, (float)CONFIG_PID_RATE_MOTOR_LIMIT);
+    pid_init(&yaw_pid, 2.0f, 0.10f, 0.05f, DT_SEC, (float)CONFIG_PID_RATE_MOTOR_LIMIT);
 
-    pid_init(&angle_pid_roll, 4.0f, 0.05f, 0.1f, DT_SEC);
-    pid_init(&angle_pid_pitch, 4.0f, 0.05f, 0.1f, DT_SEC);
+    pid_init(&angle_pid_roll, 4.0f, 0.05f, 0.1f, DT_SEC, (float)CONFIG_PID_ANGLE_RATE_LIMIT);
+    pid_init(&angle_pid_pitch, 4.0f, 0.05f, 0.1f, DT_SEC, (float)CONFIG_PID_ANGLE_RATE_LIMIT);
 
 #if IS_ENABLED(CONFIG_FLIGHT_CTL_HAS_BARO)
-    pid_init(&alt_pid, 2.5f, 0.15f, 0.45f, DT_SEC);
+    pid_init(&alt_pid, 2.5f, 0.15f, 0.45f, DT_SEC, (float)CONFIG_PID_ALTITUDE_THROTTLE_LIMIT);
 #endif
 
     LOG_INF("Starting IMU Gyro Calibration. Please keep the drone perfectly still...");

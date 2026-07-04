@@ -15,11 +15,10 @@
 /* Test Suite definition */
 ZTEST_SUITE(math_tests, NULL, NULL, NULL, NULL, NULL);
 
-/* 1. PID Controller Unit Test */
 ZTEST(math_tests, test_pid_control)
 {
     pid_controller_t pid;
-    pid_init(&pid, 1.0f, 0.5f, 0.1f, 1.0f);
+    pid_init(&pid, 1.0f, 0.5f, 0.1f, 1.0f, 100.0f);
 
     /* Step 1:
      * target = 10.0, current = 0.0 => error = 10.0, dt = 1.0s
@@ -40,6 +39,33 @@ ZTEST(math_tests, test_pid_control)
      */
     out = pid_update(&pid, 10.0f, 5.0f, 1.0f);
     zassert_true(fabsf(out - 12.0f) < 1e-4f, "Second PID step output calculation incorrect (got %f, expected 12.0)", (double)out);
+}
+
+/* 1b. PID Anti-Windup Unit Test */
+ZTEST(math_tests, test_pid_anti_windup)
+{
+#if (defined(CONFIG_PID_RATE_MOTOR_LIMIT) && CONFIG_PID_RATE_MOTOR_LIMIT > 0) || \
+    (defined(CONFIG_PID_ANGLE_RATE_LIMIT) && CONFIG_PID_ANGLE_RATE_LIMIT > 0) || \
+    (defined(CONFIG_PID_ALTITUDE_THROTTLE_LIMIT) && CONFIG_PID_ALTITUDE_THROTTLE_LIMIT > 0)
+    pid_controller_t pid;
+    pid_init(&pid, 1.0f, 1.0f, 0.0f, 1.0f, 10.0f);
+
+    /* Step 1: error = 20.0
+     * Integrator accumulates 20.0 * 1.0 = 20.0.
+     * It should be clamped to 10.0.
+     * Expected Output: Proportional (20.0) + Integral (10.0) = 30.0.
+     * Output should be clamped to 10.0.
+     */
+    float out = pid_update(&pid, 20.0f, 0.0f, 1.0f);
+#if !IS_ENABLED(CONFIG_CMSIS_DSP)
+    zassert_true(fabsf(pid.integrator - 10.0f) < 1e-4f, 
+                 "Integrator not clamped (got %f, expected 10.0)", (double)pid.integrator);
+#endif
+    zassert_true(fabsf(out - 10.0f) < 1e-4f, 
+                 "Output not clamped (got %f, expected 10.0)", (double)out);
+#else
+    ztest_test_skip();
+#endif
 }
 
 /* 2. Mahony Stationary Test */

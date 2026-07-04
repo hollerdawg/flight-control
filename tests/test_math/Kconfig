@@ -1,0 +1,14 @@
+# Kconfig for test_math
+source "Kconfig.zephyr"
+
+config PID_RATE_MOTOR_LIMIT
+    int "PID Rate Loops Motor Output Limit"
+    default 400
+
+config PID_ANGLE_RATE_LIMIT
+    int "PID Angle Loops Target Rate Limit"
+    default 200
+
+config PID_ALTITUDE_THROTTLE_LIMIT
+    int "PID Altitude Loop Throttle Offset Limit"
+    default 200
