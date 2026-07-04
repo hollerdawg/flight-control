@@ -42,6 +42,20 @@ Build the application targeting the FRDM-K22F board with the AGM01 sensor shield
 west build -b frdm_k22f --shield frdm_stbc_agm01 quad-app -p always
 ```
 
+### Running Unit Tests
+The core math modules (PID controller and Mahony filter) have unit tests that run on the host via Zephyr's `native_sim` board.
+
+**Using west build (manual):**
+```bash
+west build -b native_sim quad-app/tests/test_math -p always
+./build/zephyr/zephyr.exe
+```
+
+**Using twister (recommended for CI):**
+```bash
+west twister -T quad-app/tests/test_math -p native_sim
+```
+
 ## Architecture
 The flight control math is factored into testable, standalone modules:
 

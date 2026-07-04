@@ -1,0 +1,4 @@
+tests:
+  math_tests.pid_and_mahony:
+    platform_allow: native_sim
+    tags: math
