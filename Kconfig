@@ -17,4 +17,28 @@ config FLIGHT_CTL_RC_IBUS
       (115200 baud, single wire). Supports up to 14 channels. When disabled,
       individual PWM capture inputs on FTM1/FTM2 are used for each channel.
 
+config MAGNETOMETER_ENABLED
+    bool "Enable Magnetometer and 9-Axis AHRS Fusion"
+    default y
+    help
+      Enables reading magnetometer values from the FXOS8700 device and feeding
+      them to the Mahony filter to compute a yaw drift-compensated orientation.
+
+config MAG_CALIBRATION_BG_THREAD
+    bool "Enable background magnetometer calibration thread"
+    default y
+    depends on MAGNETOMETER_ENABLED
+    help
+      Spawns a background thread at startup that gathers magnetometer data over 
+      time to compute hard-iron offsets.
+
+config MAG_CALIBRATION_RUNTIME
+    bool "Enable runtime magnetometer calibration via shell command"
+    default y
+    depends on MAGNETOMETER_ENABLED
+    select SHELL
+    help
+      Enables the 'mag_calib' shell command to trigger magnetometer
+      calibration at runtime.
+
 source "Kconfig.zephyr"

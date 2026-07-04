@@ -13,7 +13,7 @@
 extern float q0, q1, q2, q3;
 extern float eIntX, eIntY, eIntZ;
 
-void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, float dt);
+void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt);
 void mahony_get_euler(float *roll, float *pitch);
 void mahony_reset(void);
 

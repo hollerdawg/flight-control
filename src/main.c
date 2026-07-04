@@ -62,6 +62,20 @@ static float target_altitude      = 1.5f;
 static float current_alt          = 0.0f;
 #endif
 
+#if IS_ENABLED(CONFIG_MAGNETOMETER_ENABLED)
+static volatile float raw_mag_x = 0.0f;
+static volatile float raw_mag_y = 0.0f;
+static volatile float raw_mag_z = 0.0f;
+
+static float mag_offset_x = 0.0f;
+static float mag_offset_y = 0.0f;
+static float mag_offset_z = 0.0f;
+static bool mag_calibrated = false;
+
+static struct k_sem mag_calib_sem;
+static volatile bool mag_calibrating = false;
+#endif
+
 static float target_throttle = (float)MOTOR_MIN_PULSE_US;
 static float target_roll     = 0.0f;
 static float target_pitch    = 0.0f;
@@ -109,6 +123,79 @@ static void rc_capture_cb(const struct device *dev, uint32_t channel,
         }
     }
 }
+#endif
+
+#if IS_ENABLED(CONFIG_MAGNETOMETER_ENABLED)
+void mag_calibration_thread(void *p1, void *p2, void *p3)
+{
+    k_sem_init(&mag_calib_sem, 0, 1);
+
+#if IS_ENABLED(CONFIG_MAG_CALIBRATION_BG_THREAD)
+    k_sleep(K_MSEC(3000));
+    k_sem_give(&mag_calib_sem);
+#endif
+
+    while (1) {
+        k_sem_take(&mag_calib_sem, K_FOREVER);
+        mag_calibrating = true;
+        LOG_INF("Magnetometer calibration started. Please rotate the device slowly in all directions...");
+
+        float m_min[3] = {999999.0f, 999999.0f, 999999.0f};
+        float m_max[3] = {-999999.0f, -999999.0f, -999999.0f};
+
+        for (int i = 0; i < 300; i++) {
+            float mx = raw_mag_x;
+            float my = raw_mag_y;
+            float mz = raw_mag_z;
+
+            if (mx < m_min[0]) m_min[0] = mx;
+            if (my < m_min[1]) m_min[1] = my;
+            if (mz < m_min[2]) m_min[2] = mz;
+
+            if (mx > m_max[0]) m_max[0] = mx;
+            if (my > m_max[1]) m_max[1] = my;
+            if (mz > m_max[2]) m_max[2] = mz;
+
+            k_msleep(50);
+        }
+
+        float diff_x = m_max[0] - m_min[0];
+        float diff_y = m_max[1] - m_min[1];
+        float diff_z = m_max[2] - m_min[2];
+
+        if (diff_x > 0.02f && diff_y > 0.02f && diff_z > 0.02f) {
+            mag_offset_x = (m_max[0] + m_min[0]) / 2.0f;
+            mag_offset_y = (m_max[1] + m_min[1]) / 2.0f;
+            mag_offset_z = (m_max[2] + m_min[2]) / 2.0f;
+            mag_calibrated = true;
+            LOG_INF("Magnetometer calibration complete! Offsets: X=%f, Y=%f, Z=%f",
+                    (double)mag_offset_x, (double)mag_offset_y, (double)mag_offset_z);
+        } else {
+            LOG_WRN("Magnetometer calibration failed: insufficient movement. Offsets unchanged.");
+        }
+        mag_calibrating = false;
+    }
+}
+
+K_THREAD_DEFINE(mag_calib_id, 1024, mag_calibration_thread, NULL, NULL, NULL,
+                5, 0, 0);
+
+#if IS_ENABLED(CONFIG_MAG_CALIBRATION_RUNTIME)
+#include <zephyr/shell/shell.h>
+
+static int cmd_mag_calib(const struct shell *sh, size_t argc, char **argv)
+{
+    if (mag_calibrating) {
+        shell_print(sh, "Magnetometer calibration is already in progress.");
+        return -EBUSY;
+    }
+    shell_print(sh, "Triggering magnetometer calibration...");
+    k_sem_give(&mag_calib_sem);
+    return 0;
+}
+
+SHELL_CMD_REGISTER(mag_calib, NULL, "Trigger magnetometer calibration", cmd_mag_calib);
+#endif
 #endif
 
 void flight_control_thread(void *p1, void *p2, void *p3)
@@ -197,7 +284,7 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         float ax = (float)sensor_value_to_double(&accel_data[0]);
         float ay = (float)sensor_value_to_double(&accel_data[1]);
         float az = (float)sensor_value_to_double(&accel_data[2]);
-        mahony_update(0.0f, 0.0f, 0.0f, ax, ay, az, 0.01f);
+        mahony_update(0.0f, 0.0f, 0.0f, ax, ay, az, 0.0f, 0.0f, 0.0f, 0.01f);
 
         k_sleep(K_MSEC(10));
     }
@@ -261,8 +348,27 @@ void flight_control_thread(void *p1, void *p2, void *p3)
         accel_y = (float)sensor_value_to_double(&accel_data[1]);
         accel_z = (float)sensor_value_to_double(&accel_data[2]);
 
+        float mx = 0.0f, my = 0.0f, mz = 0.0f;
+#if IS_ENABLED(CONFIG_MAGNETOMETER_ENABLED)
+        struct sensor_value mag_data[3];
+        sensor_channel_get(accel_dev, SENSOR_CHAN_MAGN_XYZ, mag_data);
+        raw_mag_x = (float)sensor_value_to_double(&mag_data[0]);
+        raw_mag_y = (float)sensor_value_to_double(&mag_data[1]);
+        raw_mag_z = (float)sensor_value_to_double(&mag_data[2]);
+
+        if (mag_calibrated) {
+            mx = raw_mag_x - mag_offset_x;
+            my = raw_mag_y - mag_offset_y;
+            mz = raw_mag_z - mag_offset_z;
+        } else {
+            mx = raw_mag_x;
+            my = raw_mag_y;
+            mz = raw_mag_z;
+        }
+#endif
+
         /* Mahony Filter expects rad/s */
-        mahony_update(gx, gy, gz, accel_x, accel_y, accel_z, DT_SEC);
+        mahony_update(gx, gy, gz, accel_x, accel_y, accel_z, mx, my, mz, DT_SEC);
         mahony_get_euler(&est_roll, &est_pitch);
 
         /* Convert to deg/s for the rate PID controllers */

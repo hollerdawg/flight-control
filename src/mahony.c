@@ -29,11 +29,11 @@ void mahony_reset(void)
     eIntX = 0.0f; eIntY = 0.0f; eIntZ = 0.0f;
 }
 
-void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt)
 {
     float recipNorm;
     float vx, vy, vz;
-    float ex, ey, ez;
+    float ex = 0.0f, ey = 0.0f, ez = 0.0f;
     float qa, qb, qc;
 
     // Normalise accelerometer measurement
@@ -53,8 +53,37 @@ void mahony_update(float gx, float gy, float gz, float ax, float ay, float az, f
         ex = (ay * vz - az * vy);
         ey = (az * vx - ax * vz);
         ez = (ax * vy - ay * vx);
+    }
 
-        // Compute and apply integral feedback if enabled
+#if IS_ENABLED(CONFIG_MAGNETOMETER_ENABLED)
+    // Normalise magnetometer measurement
+    float mag_norm = my_sqrt(mx * mx + my * my + mz * mz);
+    if (mag_norm > 0.0f) {
+        recipNorm = 1.0f / mag_norm;
+        mx *= recipNorm;
+        my *= recipNorm;
+        mz *= recipNorm;
+
+        // Reference direction of Earth's magnetic field in body frame
+        float hx = mx * (q0*q0 + q1*q1 - q2*q2 - q3*q3) + 2.0f * my * (q1*q2 - q0*q3) + 2.0f * mz * (q1*q3 + q0*q2);
+        float hy = 2.0f * mx * (q1*q2 + q0*q3) + my * (q0*q0 - q1*q1 + q2*q2 - q3*q3) + 2.0f * mz * (q2*q3 - q0*q1);
+        float bx = my_sqrt(hx * hx + hy * hy);
+        float bz = 2.0f * mx * (q1*q3 - q0*q2) + 2.0f * my * (q2*q3 + q0*q1) + mz * (q0*q0 - q1*q1 - q2*q2 + q3*q3);
+
+        // Estimated direction of magnetic field in body frame
+        float wx = bx * (q0*q0 + q1*q1 - q2*q2 - q3*q3) + bz * 2.0f * (q1*q3 - q0*q2);
+        float wy = bx * 2.0f * (q1*q2 - q0*q3) + bz * 2.0f * (q2*q3 + q0*q1);
+        float wz = bx * 2.0f * (q1*q3 + q0*q2) + bz * (q0*q0 - q1*q1 - q2*q2 + q3*q3);
+
+        // Error is cross product between estimated direction and measured direction of magnetic field
+        ex += (my * wz - mz * wy);
+        ey += (mz * wx - mx * wz);
+        ez += (mx * wy - my * wx);
+    }
+#endif
+
+    // Compute and apply integral feedback if enabled
+    if (ex != 0.0f || ey != 0.0f || ez != 0.0f) {
         if (MAHONY_KI > 0.0f) {
             eIntX += ex * dt;
             eIntY += ey * dt;

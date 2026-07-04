@@ -4,7 +4,7 @@ An out-of-tree Zephyr RTOS flight controller firmware for quadcopters built on t
 
 ## Features
 - **400Hz Flight Loop**: Real-time flight control loop run in a high-priority cooperative thread.
-- **IMU Sensor Fusion**: Attitude estimation (Roll/Pitch) using a complementary filter powered by the **FRDM-STBC-AGM01** shield (FXOS8700 Accelerometer + FXAS21002 Gyroscope).
+- **IMU Sensor Fusion**: Attitude estimation (Roll/Pitch) using a **Mahony complementary filter** powered by the **FRDM-STBC-AGM01** shield (FXOS8700 Accelerometer + FXAS21002 Gyroscope).
 - **CMSIS-DSP Hardware Acceleration**: Leverages the Cortex-M4F single-precision FPU using ARM CMSIS-DSP library for high-speed PID updates and fast math (`arm_sqrt_f32`).
 - **Barometer Subsystem**: Altitude estimation and PID tracking utilizing the Infineon DPS310 sensor over a shared I2C bus.
 - **Auto Landing Assist**: Configurable manual or automatic failsafe landing sequence that gently grounds the drone and disarms the motors.
@@ -66,4 +66,11 @@ The flight controller includes an interactive shell subsystem enabled by default
   ```bash
   log enable flight_blackbox
   ```
+
+* **Trigger Magnetometer Calibration**:
+  To manually trigger a 15-second magnetometer hard-iron calibration at runtime:
+  ```bash
+  mag_calib
+  ```
+  During calibration, rotate the device slowly in all directions to capture minimum and maximum values along all three axes.
 
