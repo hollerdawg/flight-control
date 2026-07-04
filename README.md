@@ -42,6 +42,16 @@ Build the application targeting the FRDM-K22F board with the AGM01 sensor shield
 west build -b frdm_k22f --shield frdm_stbc_agm01 quad-app -p always
 ```
 
+## Architecture
+The flight control math is factored into testable, standalone modules:
+
+| Module | Files | Description |
+|--------|-------|-------------|
+| **Mahony Filter** | `src/mahony.c`, `src/mahony.h` | 9-axis attitude estimation (quaternion → Euler angles) |
+| **PID Controller** | `src/pid_control.c`, `src/pid_control.h` | Generic PID with automatic CMSIS-DSP `dt` pre-scaling when available |
+| **Flight Loop** | `src/main.c` | 400Hz control thread, sensor pipeline, motor mixing |
+| **iBUS Parser** | `src/ibus.c`, `src/ibus.h` | Single-wire FlySky iBUS RC protocol (Kconfig-gated) |
+
 
 ## Logging & Telemetry
 System logs are outputs over UART (115200 baud) in deferred mode to ensure printing telemetry does not block the 400Hz control thread.

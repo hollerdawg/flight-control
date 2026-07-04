@@ -1,5 +1,5 @@
 /*
- * mahony.c - Flight control Mahony 6-axis AHRS filter
+ * mahony.c - Flight control Mahony 9-axis AHRS filter
  */
 
 #include "mahony.h"
